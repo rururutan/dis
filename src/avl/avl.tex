@@ -1,0 +1,464 @@
+\documentstyle[a4j]{jarticle}
+\title{汎用AVL木ライブラリ\\
+{\normalsize version 0.1}
+}
+\author{K.Abe\\Nifty-Serve PDC02373\\E-Mail k-abe@ics.osaka-u.ac.jp}
+\date{\today}
+\sloppy
+
+\begin{document}
+\maketitle
+\begin{abstract}
+このドキュメントは、汎用AVL木ライブラリのマニュアルである。このライブ
+ラリは大学の演習の自由課題として作成したもので、このドキュメントはその
+時のレポートを書き直したものである。
+\end{abstract}
+
+\section{AVL木とは}
+AVL木は２進木の一種で、以下の条件を常に満たしているという性質がある。
+
+\begin{quote}
+２進木の各節点において、右部分木と左部分木の高さの差が１を超えない。
+\end{quote}
+
+一般の２進木では、節点数$n$に対し最悪の場合木の高さが$n$になる場合があ
+るが、AVL木では、ほぼ$\log_2{n}$に保つことができる。また、鍵の探索、挿
+入、削除のどれも$O(\log_2{n})$ の手間で可能である。
+
+AVL木はこのような良い性質を持っているが、木を再構成するのが面倒などの
+理由で自作のプログラムにはあまり使われないようである。そこで、面倒な木
+に対する操作をカプセル化してユーザから隠すことにより、誰でも簡単にAVL
+木の利点を亨受できるようにしようというのがこのライブラリの目的である。
+
+AVL木の詳細については参考文献\cite{data-manage}等を参照して欲しい。
+
+\section{ライブラリの実現法の概略}
+ライブラリとするのであるから、ユーザが任意のデータを木の節点に与えられ
+なければならない。そのため、ライブラリ側の木の節点の構造体にはユーザの
+データの構造体は含まず、ユーザのデータに対するポインタ({\bf void}*)だ
+けを持っておくことにする。木にデータを挿入する場合、ライブラリはデータ
+が格納されている構造体へのポインタ(アドレス)を受け取って、そのポインタ
+の値を節点の構造体に記憶するようにする。このように、木の節点はライブラ
+リ側の構造体とユーザ側の構造体が対となっている。
+
+また、各節点の間には大小関係が成立するが、その比較を行なう関数も任意で
+あるので、ユーザがライブラリに与えられなければならない。１つのプログラ
+ム中から複数の(データの型が違う)AVL木を使いたい場合もあるので、１つの
+AVL木に比較関数へのポインタなどを含んだ１つの構造体を持たせるようにす
+る。(これを(AVL木の)ハンドルということにする。)
+
+ユーザの要求によっては、ある節点の次(前)の節点を(高速に)検索したい場合
+があると思われるので、節点に線形リストとしてのポインタも持たせることに
+した。これによってこのライブラリを高速に検索可能な(順序つき)線形リスト
+の代わりとして用いることが可能だと思われる。
+
+ライブラリとして提供すべき関数を考えると、少なくとも以下のようなものが
+必要である。
+
+\begin{quote}
+\begin{tabular}{ll}
+create\_tree	&木を作る\\
+destroy\_tree	&木をメモリから開放する\\
+insert		&木に節点を挿入する\\
+delete		&木から節点を削除する\\
+search		&木から節点を検索する\\
+\end{tabular}
+\end{quote}
+
+さらに利便を考えて、以下のような関数も提供することにした。
+
+\begin{quote}
+\begin{tabular}{ll}
+data\_number	&木の節点数を返す\\
+get\_min	&木の最小の鍵を持つ節点を返す\\
+get\_max	&木の最大の鍵を持つ節点を返す\\
+next		&与えられた節点の次の節点を返す\\
+previous	&与えられた節点の前の節点を返す\\
+search\_next	&与える鍵と等しいかそれよりも大きい鍵を持つデータを検索する\\
+search\_previous &与える鍵と等しいかそれよりも小さい鍵を持つデータを検索する\\
+print\_tree	&木を表示する(デバッグ用)\\
+\end{tabular}
+\end{quote}
+
+\section{データ構造}
+このライブラリの内部で用いているデータ構造を以下に示す。これらの構造体
+についてユーザはなにも知らなくて良い。
+
+AVL木のライブラリ側の節点の構造体は以下のようになっている。
+
+\begin{quote}
+{\bf typedef struct} \_avl\_node \{\\
+\hspace*{1cm}
+\begin{tabular}{lll}
+{\it /* AVL-tree stuff */}&&\\
+{\bf struct} \_avl\_node	&*left;		&左の子へのポインタ\\
+{\bf struct} \_avl\_node	&*right;	&右の子へのポインタ\\
+{\bf struct} \_avl\_node	&*parent;	&親へのポインタ\\
+{\bf unsigned short}		&left\_depth;	&左部分木の高さ\\
+{\bf unsigned short}		&right\_depth;	&右部分木の高さ\\
+{\it /* linked-list stuff */}&&\\
+{\bf struct} \_avl\_node	&*next;		&次の節点へのポインタ\\
+{\bf struct} \_avl\_node	&*previous;	&前の節点へのポインタ\\
+{\it /* data */}&&\\
+{\bf void}	       		&*data;		&ユーザの節点の構造体へのポインタ\\
+\end{tabular}\\
+\} avl\_node;\footnote{この構造体中の{\bf void}*は実際には
+AVL\_USERDATA *である。}
+\end{quote}
+左の子がなければ left = NULL, left\_depth = 0, 右の子がなければ right =
+NULL, right\_depth = 0, AVL木の根では parent = NULL, また、最大の節点で
+は next = NULL, 最小の節点では previous = NULL である。
+
+AVL木では $|\rm right\_depth - left\_depth |$ は 0 か 1 である。2 になっ
+たら木を再構成しなければならない。(そうしないとAVL木の条件からはずれて
+しまう。)
+
+AVL木のハンドルの構造体は以下のようになっている。これはAVL木が作成され
+た時に１つ作成される。
+\begin{quote}
+\small
+{\bf typedef struct} \_avl\_root\_node \{\\
+\hspace*{1cm}
+\begin{tabular}{lll}
+{\bf struct} \_avl\_node	&*avl\_tree;	&根の節点へのポインタ\\
+{\bf struct} \_avl\_node	&*min;		&最小の節点へのポインタ\\
+{\bf struct} \_avl\_node	&*max;		&最大の節点へのポインタ\\
+{\bf int}			&data\_number;	&木に含まれる節点の数\\
+{\bf int}			&(*compare\_function)( void* , void* );	&比較関数\\
+{\bf void}			&(*free\_function)( void* );		&開放関数\\
+{\bf void}			&(*print\_function)( void* );		&表示関数\\
+\end{tabular}\\
+\} avl\_root\_node;\footnote{この構造体中の{\bf void}*は実際には
+AVL\_USERDATA *である。}
+\end{quote}
+compare\_function は``ユーザの比較関数''へのポインタ、free\_function 
+は``ユーザのデータを開放する関数''へのポインタ、print\_function は ``
+ユーザのデータ表示関数''へのポインタである。詳しくは
+\ref{user-function}節を参照のこと。
+
+\section{使い方}
+このAVL木ライブラリを使ったプログラムの書き方を説明する。以下で説明す
+る関数のいくつかは実際にはマクロであるが、関数版も用意されている。
+(\ref{use-macro}節参照)
+
+\subsection{まず始めに}
+AVL木の節点のユーザ側の構造体を適当な名前で定義する。(特に断わらない限
+り、以下で節点の構造体という語はユーザ側の構造体のこととする。)
+\begin{quote}
+{\bf struct} mystruct \{\\
+\hspace*{1cm}{\bf int} value;\\
+\};
+\end{quote}
+
+AVL木ライブラリのヘッダファイルをインクルードする。
+\begin{quote}
+{\bf\#include} \verb+"avl.h"+
+\end{quote}
+
+ヘッダファイルをインクルードする前にユーザ側の節点の構造体の型を
+AVL\_USERDATAに{\bf\#define}すると、AVL木ライブラリの関数プロトタイプ
+が適当に変更されるので、コンパイル時に型チェックできて有用である。
+AVL\_USERDATAを{\bf\#define}しないとユーザ側の節点の構造体の型へのポイ
+ンタは{\bf void*}になる。詳しくは\verb+avl.h+を参照のこと。
+\begin{quote}
+{\bf\#define} AVL\_USERDATA mystruct\\
+{\bf\#include} \verb+"avl.h"+
+\end{quote}
+
+\subsection{木を作るには}
+ライブラリから呼び出される３つの関数を定義する。
+\label{user-function}
+\begin{description}
+\item[比較関数]
+節点(の鍵)を比較する関数を適当な名前で定義する。関数は２つの``節点の構
+造体へのポインタ''を引数として取り、{\bf int}を返す関数である。返り値
+は以下のようになっていなければならない。
+\begin{quote}
+＋:１番目の引数のさす構造体の鍵 $>$ ２番目の引数のさす構造体の鍵\\
+０:１番目の引数のさす構造体の鍵 $=$ ２番目の引数のさす構造体の鍵\\
+－:１番目の引数のさす構造体の鍵 $<$ ２番目の引数のさす構造体の鍵
+\end{quote}
+
+\begin{quote}
+{\bf int} compare( data1 , data2 )\\
+{\bf struct} mystruct *data1 , *data2;\\
+\{\\
+\hspace*{1cm}{\bf return} data1$->$value $-$ data2$->$value;\\
+\}
+\end{quote}
+
+\item[開放関数]
+節点(の構造体)を開放する関数を適当な名前で定義する。この関数は節点を削
+除する関数AVL\_delete(), 木を開放する関数 AVL\_destroy\_tree() によっ
+て使用される。節点が malloc() によって作られているのなら free() がある
+ので定義しないでも良い。定義すべき関数の引数は節点の構造体に対するポイ
+ンタで、返り値は{\bf void}である。
+
+\item[表示関数]
+\begin{sloppypar}
+必要ならば、節点を表示する関数を適当な名前で定義する。この関数は木を表
+示する関数 AVL\_print\_tree() によって使用される。AVL\_print\_tree() 
+を使用しないのならば定義しないでも良い。定義すべき関数の引数は節点の構
+造体に対するポインタで、返り値は{\bf void}である。なお、この関数の中で
+は改行してはならない。
+\end{sloppypar}
+\begin{quote}
+{\bf static void} print\_value( mydata )\\
+{\bf struct} mystruct *mydata;\\
+\{\\
+\hspace*{1cm}printf( \verb+"%d"+ , mydata$->$value );\\
+\}
+\end{quote}
+\end{description}
+
+\begin{sloppypar}
+これで木を作る準備ができた。木を作るためにはAVL\_create\_tree() を用い
+る。第１引数はユーザの比較関数へのポインタ、第２引数は開放関数へのポイ
+ンタ、第３引数は表示関数へのポインタである。定義しなかった関数に対応す
+る引数には NULL を入れておけば良い。返り値はAVL木のハンドルに対するポ
+インタである。ハンドルの型は avl\_root\_node である。この返り値はAVL木
+に対する操作を行なうのに必要なので保存しておかなければならない。
+\end{sloppypar}
+
+\begin{quote}
+avl\_root\_node	*root;\\
+root = AVL\_create\_tree( compare , free , print\_value );
+\end{quote}
+
+これで AVL木を使える状態になる。
+
+\subsection{木を開放するには}
+AVL木が必要なくなったら、AVL\_destroy\_tree()を用いて木を開放すれば良
+い。
+\begin{quote}
+AVL\_destroy\_tree( root );
+\end{quote}
+
+\subsection{ライブラリ側の節点の構造体へのポインタからユーザ側の節点の
+構造体へのポインタを得るには}
+
+いくつかのライブラリの関数(AVL\_search等)は``ライブラリ側の節点の構造
+体へのポインタ''(avl\_node *)を返す。これから``ユーザ側の節点の構造体
+へのポインタ''を得るには関数AVL\_get\_data(),または
+AVL\_get\_data\_safely()を用いる。両方とも引数として``ライブラリ側の節
+点の構造体へのポインタ''を取って``ユーザ側の節点の構造体へのポインタ''
+を返す。AVL\_get\_data()は引数がNULLであると異常終了するが、
+AVL\_get\_data\_safely()はその場合NULLを返す。引数がNULLになる可能性の
+ある場合にはAVL\_get\_data\_safely()を用いるべきである。
+\begin{quote}
+mystruct *my\_ptr;\\
+my\_ptr = AVL\_get\_data\_safely( AVL\_search( \ldots ));
+\end{quote}
+
+\subsection{木に節点を挿入するには}
+AVL木にデータを挿入するためには、AVL\_insert()を用いる。第１引数はAVL
+木のハンドルに対するポインタ、第２引数は節点の構造体に対するポインタで
+ある。{\bf すでに木に存在する節点と同じ鍵の値を持つ節点は挿入できない}
+ので注意。この場合挿入は行なわれず、NULLが返ってくる。
+
+多くの場合データはヒープ領域に置かれると思われるので、そのような場合の
+例を挙げる。
+\begin{quote}
+{\bf struct} mystruct *data\_ptr;\\
+data\_ptr = malloc( {\bf sizeof}( {\bf struct} mystruct ) );\\
+data\_ptr$->$value = $value$;\\
+AVL\_insert( root , data\_ptr );
+\end{quote}
+注意すべきことはAVL木のライブラリ側の節点自体にはdata\_ptrの指しているユーザ側の
+節点の構造体へのポインタが入っているだけで、実体(ここではmystruct
+*data\_ptr)がコピーされているわけではないということである。つまり、あ
+る関数中でユーザの節点の構造体の実体を{\bf auto}変数でとって
+AVL\_insert()すると、関数を抜けた後にその節点のデータが破壊される。
+
+\begin{quote}
+やってはいけない例\\
+{\bf struct} mystruct data; {\it /* bad declaration */}\\
+data.value = $value$;\\
+AVL\_insert( root , \&data );
+\end{quote}
+
+また、木に挿入した後は節点の順序関係を破壊するような操作を行なってはなら
+ない。(ここでは data\_ptr$->$value の値を変更する等 )
+
+ここでは使っていないが、AVL\_insert() からは挿入したライブラリ側の節点
+の構造体へのポインタ(avl\_node *)が返ってくる。
+
+\subsection{木から節点を検索するには}
+\subsubsection{与える鍵と等しい鍵を持つ節点を検索するには}
+ユーザの指定する鍵を持つ節点を検索するには、``ユーザの節点の構造体''に
+検索したい鍵を格納してからAVL\_search() を用いる。第１引数はAVL木のハ
+ンドルに対するポインタ、第２引数は検索したい鍵を格納した節点の構造体に
+対するポインタである。返り値は検索したライブラリ側の節点の構造体へのポ
+インタ(avl\_node *)で、見つからなかった場合にはNULLが返る。この返り値
+からAVL\_get\_data\_safely()等を用いてユーザ側のデータを参照することが
+できる。
+\begin{quote}
+{\bf struct} mystruct data;\\
+{\bf struct} mystruct *ptr;\\
+data.value = $value$;\\
+ptr = AVL\_get\_data\_safely( AVL\_search( root , \&data ) );
+\end{quote}
+
+\subsubsection{与える鍵と等しいかそれよりも大きい鍵を持つ節点を検索す
+るには}
+
+このような検索を行ないたい場合には、AVL\_search()のかわりに
+AVL\_search\_next()を用いれば良い。引数、返り値はAVL\_search()と同じで
+ある。
+
+\subsubsection{与える鍵と等しいかそれよりも小さい鍵を持つ節点を検索す
+るには}
+
+同様にAVL\_search\_previous()を用いれば良い。引数、返り値は
+AVL\_search()と同じである。
+
+\subsubsection{一番小さい鍵を持つ節点を知るには}
+AVL\_get\_min()を用いる。引数はAVL木のハンドルに対するポインタで、返り
+値はライブラリ側の節点の構造体へのポインタ(avl\_node *)である。一番小
+さい鍵を持つ節点が存在しない場合(木に１つの節点も存在しない場合)には
+NULLが返る。
+
+\subsubsection{一番大きい鍵を持つ節点を知るには}
+同様にAVL\_get\_max()を用いる。
+
+\subsubsection{ある節点の次の節点を知るには}
+木の節点を鍵の値で昇順に左から右へ並べた時、ある節点の右隣の節点を``次
+の節点''という事にする。同様に``前の節点''を定義する。この節点を得るに
+はAVL\_next()を用いる。引数はライブラリ側の節点の構造体へのポインタ
+(avl\_node *)である。引数の節点が一番大きい鍵を持っていた場合、NULLが
+返る。
+
+次の例はAVL木のすべての節点を鍵の値の昇順で表示するものである。
+\begin{quote}
+avl\_node *node\_ptr;\\
+for( node\_ptr = AVL\_get\_min( root ) ;\\
+\hspace*{1cm}node\_ptr != NULL ;\\
+\hspace*{1cm}node\_ptr = AVL\_next( node\_ptr ) ) \{\\
+\hspace*{2cm}print\_value( AVL\_get\_data( node\_ptr ) );\\
+\}
+\end{quote}
+
+\subsubsection{ある節点の前の節点を知るには}
+同様にAVL\_previous()を用いれば良い。引数の節点が一番小さい鍵を持って
+いた場合、NULLが返る。
+
+\subsection{木から節点を削除するには}
+木から節点を削除するには、AVL\_delete()を用いる。第１引数はAVL木のハン
+ドルに対するポインタ、第２引数は削除したい節点のライブラリ側の構造体に
+対するポインタである。返り値は{\bf void}である。AVL\_delete()を呼んだ
+後は第２引数の指している構造体(ライブラリ側ユーザ側どちらも)にアクセス
+してはならない。
+
+\subsection{木の節点数を知るには}
+AVL木中の節点数を知るには、AVL\_data\_number()を用いる。引数はAVL木の
+ハンドルへのポインタで、返り値が節点数である。
+
+\subsubsection{木を表示するには}
+デバッグなどで木を表示したい場合、AVL\_print\_tree()を用いれば、標準出
+力に木を書き出すことができる。引数はAVL木のハンドルへのポインタである。
+\begin{quote}
+\begin{verbatim}
+        34(0,0)
+    26(1,1)
+        22(0,0)
+18(3,2)
+        14(0,0)
+    6(2,1)
+        4(1,0)
+            2(0,0)
+\end{verbatim}
+\end{quote}
+この例では木の根が18,その左の子が6,右の子が26,26の左の子が22,右の子が
+34というようになっている。
+
+値はユーザの表示関数によって出力されている。それ以降は(左部分木の深さ,
+右部分木の深さ)となっている。
+
+\subsection{オプション}
+\subsubsection{マクロの関数化}
+\label{use-macro}
+
+\verb+"avl.h"+をインクルードする前に{\bf\#define} AVL\_NOMACROしておく
+ことで、いくつかのマクロを関数として宣言することができる。標準でマクロ
+定義されているものは以下の通りである。
+
+\begin{quote}
+AVL\_get\_data, AVL\_data\_number, AVL\_get\_min, AVL\_get\_max,
+AVL\_next, AVL\_previous
+\end{quote}
+
+\subsubsection{高速化}
+高速化のために比較関数をインライン展開する手段がある。比較関数は簡単な
+関数が多く(多くの場合１行で済む)、何回も呼ばれるためインライン展開はか
+なりの効果を発揮する。
+
+インライン展開するためにはユーザ側のプログラムで以下のようにする。
+
+\begin{enumerate}
+\sloppy
+\item
+AVL\_INCLUDE を{\bf\#define}する。
+\begin{quote}
+{\bf\#define} AVL\_INCLUDE
+\end{quote}
+\item
+ユーザ側の節点の構造体を定義し、その型をAVL\_USERDATAに{\bf\#define}す
+る。
+\begin{quote}
+{\bf struct} mystruct \{\\
+\hspace*{1cm}{\bf int} value;\\
+\};\\
+{\bf\#define} AVL\_USERDATA\hspace{1cm}(struct mystruct)
+\end{quote}
+\item
+比較関数をAVL\_COMPAREという２引数のマクロに定義する。それぞれの引数は
+AVL\_USERDATA へのポインタ型(AVL\_USERDATA *)である。
+\begin{quote}
+{\bf \#define} AVL\_COMPARE(data1,data2)$\backslash$\\
+\hspace*{1cm}((data1)$->$value $-$ (data2)$->$value)
+\end{quote}
+\item
+AVL木ライブラリのヘッダファイルとソースをインクルードする。この場合に
+はライブラリ中の元々externな関数はすべてstaticに宣言されるので複数の
+AVL木ライブラリをインクルードした場合の名前の衝突は回避される。
+\begin{quote}
+{\bf\#include \verb+"avl.h"+}\\
+{\bf\#include \verb+"avl.c"+}
+\end{quote}
+\end{enumerate}
+
+もしコンパイラとしてGCC(GNU C Compiler)を用いているなら、AVL木ライブラ
+リ中で使われているいくつかの関数もインライン展開されるので、速度を要求
+される場合にはなるべくこの方法を用いるべきである。
+
+\section{プログラムについて}
+\subsubsection{メモリ効率}
+木の節点１つあたり、ライブラリ側でポインタ６つ、{\bf short int}２つの
+メンバをもつ構造体(普通の計算機では28バイト)をmallocするので、メモリ効
+率は良いとは言いがたい。
+
+\subsubsection{時間効率}
+\begin{sloppypar}
+AVL\_insert, AVL\_delete, AVL\_search, AVL\_search\_next,
+AVL\_search\_previous はほぼ$O(\log_2{n})$で実行される。($n$は節点数)
+AVL\_get\_data, AVL\_get\_data\_safely, AVL\_get\_min, AVL\_get\_max,
+AVL\_data\_number, AVL\_next, AVL\_previous は定数時間$O(1)$で実行され
+る。
+\end{sloppypar}
+
+\section{著作権等}
+本ライブラリはフリーウェアとします。著作権は留保しますが、コピー・転載・
+改造は自由です。どのようなプログラムに組み込んでもかまいませんが、その
+際はこのライブラリを使用したことを明記して下さい。またバグフィックスや
+有用な改良などを行なった場合には作者まで送っていただけると幸いです。
+
+\section{E-Mail}
+\noindent
+k-abe@ics.osaka-u.ac.jp (junet)\\
+Abechan@Nifty-Serve (PDC02373)\\
+Abechan@ぺけろく教 (331)
+
+\begin{thebibliography}{99}
+\bibitem{data-manage} 渋谷政昭・山本毅雄 : データ管理算法, 岩波書店, 1983
+\end{thebibliography}
+\end{document}

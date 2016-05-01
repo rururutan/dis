@@ -1,0 +1,166 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+	X680x0/Human68k *以外* での再コンパイル方法
+
+────────────────────────────────────
+
+　Cygwin、Linux、FreeBSD 用の Makefile を用意してあります。src/ ディレク
+トリに Makefile というファイル名でコピーして make するか、
+	make -f ports/Makefile_Cyg_MinGW
+のように指定して下さい。
+
+
+	環境		Makefile
+	----		--------
+	Cygwin		Makefile_Cygwin
+	Cygwin (MinGW)	Makefile_Cyg_MinGW
+	Linux		Makefile_Linux
+	FreeBSD		Makefile_FreeBSD
+
+
+● Windows: Cygwin
+
+　文字コードを gcc で変換するように指定しているので、何もせず make する
+だけで通る筈です。
+
+　実行時は cygwin1.dll などの Cygwin の実行環境が必要です。
+
+
+● Windows: Cygwin -mno-cygwin (WinGW)
+
+　文字コードを gcc で変換するように指定しているので、何もせず make する
+だけで通る筈です。
+
+　DLL は不要なので、実行ファイルの配布に向いていると思います。
+
+　なお、MinGW 上でのコンパイルは試していません。
+
+
+● Linux
+
+※ Ubuntu 10.04 で確認しています。
+
+　文字コードを gcc で変換するように指定しているので、何もせず make する
+だけで通る筈です。
+
+
+● FreeBSD
+
+※ サポート担当者の手元に開発環境がないため、make してません。そのため何
+   か不具合があるかも知れません。
+
+　version 3.00 発表後に、M.Suzuki 氏から dis を FreeBSD 上でコンパイルす
+る為の差分を contribute していただき、それを参考にして正式に FreeBSD に
+対応しました。これにより、FreeBSD 上で Human68k 用のバイナリファイルを逆
+アセンブルする、クロス開発環境が実現しています。
+
+　FreeBSD で make するには、予め nkf などを使用してソースファイルの文字
+コードを日本語 EUC に変換して下さい。
+
+ソースコードでは __HUMAN68K__、__LIBC__、__BIG_ENDIAN__ などの定義を参照
+しています。多分 NetBSD でもコンパイル出来ると思います。
+
+　FreeBSD クロス版の発案は M.Suzuki 氏によるものですが、正式バージョンへ
+の取り込みは全て私自身によるコーディングなので、何か不具合があれば私の方
+に連絡願います。
+
+
+● それ以外の OS への移植
+
+　以下の調整をして下さい。
+
+・M68000 のようなビッグエンディアン環境で、マクロ __BIG_ENDIAN__ が定義
+  されない場合は Makefile で自前で定義します。
+
+・ソースファイルの文字コードが SHIFT-JIS なので、違う文字コードを使う環
+境では nkf などで変換するか、コンパイラのオプションで指定します。
+
+・src/estruct.h で定義している構造体で GCC 拡張機能の
+	__attribute__ ((packed))
+  を使っているので、GCC 以外では同等の機能への置き換えが必要です。
+
+・strupr() や strtox() など、標準的でない関数の有無で Makefile を書き換
+  えます。
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+	X680x0/Human68k での再コンパイル方法
+
+────────────────────────────────────
+
+　完全な再コンパイルには、long double(12バイト)に対応している sprintf()
+と、文字列を long double に変換する strtox() が必要です。
+
+　strtox() は HAS の fexpr.s からコードを抜き出すと楽に作れますが、
+sprintf() が long double に対応していないと意味がありません。
+
+
+1) ライブラリの設定
+
+Makefile の LIBFLAGS を、持っていないライブラリをリンクしないように修正
+します。
+	libld.a がない場合	-lld を削除します
+	libhdi.a 〃		-lhdi 〃
+	libhmem.a 〃		-lhmem 〃
+
+なお、libioctl.a を持っている人は -lioctl を追加するのも良いでしょう。
+
+2) sprintf() の long double 対応有無
+
+sprintf() が long double に対応していない場合は、Makefile の FUNCCFLAGS
+に -DNO_PRINTF_LDBL を追加します。
+
+LIBC や libhdi は対応していません。
+
+3) strtox() の有無
+
+strtox() がない場合は FUNCCFLAGS から -DHAVE_STRTOX を削除します。
+
+更に、fpconv.c:fpconv_x() の以下の部分を調整します。
+	#ifndef	HAVE_STRTOX
+	     || e <= 64		/* ライブラリに依存 */
+	#endif
+
+ただし、-DNO_PRINTF_LDBL を追加した場合は使わないので、そのままで構いま
+せん。
+
+4) (好みで) ファイル上書き確認時の問い合せ
+
+標準では Yes/No/Rename 入力後にリターンキーを押さないと続行されません。
+'y' キーなどを押しただけで続行したい場合は、Makefile の DEFAULTCFLAGS
+に -DQUICK_YES_NO を追加します。
+
+5) (好みで) fefunc.h の読み込み
+
+dis 実行時に fefunc.mac ではなく fefunc.h を読み込むようにする場合は、同
+じく -DREAD_FEFUNC_H を追加します。
+
+6) make
+
+make を実行します。
+
+
+● コンパイル時の警告表示について
+
+1. analyze.c の
+	register void* sp __asm ("sp");
+この部分で変数未初期化警告が出ます。gcc の asm 文の取り扱いに由来するよ
+うですが、出ないようにすると僅かですが効率が悪くなるので放置しています。
+
+2. eval.y を bison-1.28 で処理すると、eval.c のコンパイルで10進定数が大
+きすぎるという警告が大量に出ます。bison が short を int に符合拡張してい
+るのが原因のようです。bison のバージョンが違えば警告は出なくなるかも知れ
+ません。dis のソース側で対処できないと思うので、そのままにしています。
+
+3. X680x0/Human68k 以外では、label.c のコンパイル時に avl.c で
+	AVL_destroy_tree()
+	AVL_search_previous()
+	AVL_check_tree()
+が使われていないという警告が出る場合がありますが、その通りの意味です。
+
+実行ファイルに多少無駄が生じますが、avl.c はあまりいじりたくなかったので
+そのままにしてあります。
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

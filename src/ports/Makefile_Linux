@@ -1,0 +1,139 @@
+# Makefile for dis (Linux cross)
+
+.phony: all clean index install tags
+
+PROGRAM		= dis
+
+YACC		= bison
+CC		= gcc -finput-charset=cp932
+LD		= $(CC)
+LDFLAGS		=
+
+FUNCCFLAGS	=
+#		  -DHAVE_STRTOX
+#		  -DHAVE_STRUPR
+#		  -DHAVE_JCTYPE_H
+#		  -DNO_PRINTF_LDBL
+
+DEFAULTCFLAGS	= -Wall -pipe
+#		  -DQUICK_YES_NO
+#		  -DREAD_FEFUNC_H
+
+OPTCFLAGS	= -O3
+
+CFLAGS = $(DEFAULTCFLAGS) $(FUNCCFLAGS) $(OPTCFLAGS)
+
+LIBS		=
+
+%.o: %.y
+	$(YACC.y) $< -o $*.c
+	$(COMPILE.c) $*.c $(OUTPUT_OPTION)
+
+HDRS		= analyze.h \
+		  disasm.h \
+		  estruct.h \
+		  etc.h \
+		  fpconv.h \
+		  generate.h \
+		  getopt.h \
+		  global.h \
+		  hex.h \
+		  include.h \
+		  label.h \
+		  labelfile.h \
+		  offset.h \
+		  option.h \
+		  output.h \
+		  symbol.h \
+		  table.h
+
+SRCS		= analyze.c \
+		  analyze2.c \
+		  disasm.c \
+		  disasmonly.c \
+		  etc.c \
+		  eval.y \
+		  fpconv.c \
+		  generate.c \
+		  getopt.c \
+		  hex.c \
+		  include.c \
+		  label.c \
+		  labelcheck.c \
+		  labelfile.c \
+		  main.c \
+		  offset.c \
+		  option.c \
+		  output.c \
+		  search.c \
+		  symbol.c \
+		  table.c \
+		  version.c
+
+OBJS		= $(addsuffix .o,$(basename $(SRCS)))
+
+all: $(PROGRAM)
+
+$(PROGRAM): $(OBJS)
+	$(LD) $(LDFLAGS) $(LIBS) $(OBJS) -o $(PROGRAM)
+
+install: $(PROGRAM)
+	install -s $(PROGRAM) /usr/local/bin
+
+clean:
+	rm -f $(PROGRAM) $(OBJS) eval.c *.core *~
+
+index:
+	ctags -wx $(HDRS) $(SRCS)
+
+tags: $(HDRS) $(SRCS)
+	etags -et $(HDRS) $(SRCS)
+
+###
+
+analyze.o:	estruct.h global.h label.h analyze.h disasm.h offset.h etc.h
+analyze2.o:	estruct.h global.h label.h analyze.h disasm.h offset.h etc.h
+disasm.o:	estruct.h global.h disasm.h fpconv.h hex.h etc.h
+disasmonly.o:	estruct.h global.h disasm.h generate.h output.h hex.h etc.h
+etc.o:		estruct.h global.h label.h offset.h symbol.h etc.h
+eval.o:		estruct.h global.h label.h offset.h generate.h hex.h etc.h \
+		labelfile.h table.h disasm.h fpconv.h
+fpconv.o:	estruct.h fpconv.h hex.h
+generate.o:	estruct.h disasm.h generate.h global.h fpconv.h hex.h etc.h \
+		include.h label.h offset.h output.h symbol.h table.h
+getopt.o:	getopt.h
+hex.o:		estruct.h hex.h
+include.o:	estruct.h disasm.h generate.h global.h include.h etc.h
+label.o:	estruct.h global.h label.h etc.h avl/avl.c
+labelcheck.o:	estruct.h global.h label.h disasm.h analyze.h offset.h etc.h
+labelfile.o:	estruct.h global.h label.h symbol.h analyze.h etc.h
+main.o:		estruct.h global.h label.h symbol.h analyze.h etc.h \
+		disasm.h generate.h include.h labelfile.h offset.h option.h table.h
+offset.o:	estruct.h global.h offset.h etc.h
+option.o:	estruct.h global.h generate.h disasm.h analyze.h hex.h etc.h \
+		fpconv.h getopt.h include.h option.h output.h symbol.h
+output.o:	estruct.h global.h disasm.h output.h generate.h hex.h etc.h
+search.o:	estruct.h global.h label.h offset.h etc.h
+symbol.o:	estruct.h global.h symbol.h output.h label.h hex.h etc.h
+table.o:	estruct.h global.h label.h labelfile.h table.h offset.h hex.h etc.h
+version.o:
+
+analyze.h:	estruct.h label.h
+disasm.h:	estruct.h
+estruct.h:
+etc.h:		global.h
+fpconv.h:
+generate.h:	estruct.h
+getopt.h:
+global.h:	estruct.h
+hex.h:		global.h
+include.h:
+label.h:
+labelfile.h:
+offset.h:
+option.h:
+output.h:
+symbol.h:
+table.h:	etc.h
+
+# EOF
