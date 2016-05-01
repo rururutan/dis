@@ -5,7 +5,7 @@
 PROGRAM		= dis
 
 YACC		= bison
-CC		= gcc-3 -mno-cygwin -finput-charset=cp932 -fexec-charset=cp932
+CC		= gcc -finput-charset=cp932 -fexec-charset=cp932 -fpermissive
 LD		= $(CC)
 LDFLAGS		=
 
